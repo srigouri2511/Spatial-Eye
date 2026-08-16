@@ -41,13 +41,19 @@ class PlaceApiService {
   /// Asynchronously saves place to FastAPI backend with automatic retry logic
   Future<SavedPlaceResult> savePlace({
     required String name,
-    required List<double> embedding,
+    required List<List<double>> embeddings,
+    String? wifiSsid,
+    double? gpsLat,
+    double? gpsLng,
     Map<String, dynamic>? metadata,
     int maxRetries = 3,
   }) async {
     final body = jsonEncode({
       "name": name,
-      "embedding": embedding,
+      "embeddings": embeddings,
+      "wifi_ssid": wifiSsid,
+      "gps_lat": gpsLat,
+      "gps_lng": gpsLng,
       "metadata": metadata ?? {},
     });
 

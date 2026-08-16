@@ -112,7 +112,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
         try {
           await _apiService.savePlace(
             name: placeName,
-            embedding: sceneVec.values,
+            embeddings: [sceneVec.values],
           );
           await _audioQueue.enqueue(
             text: "Saved as $placeName.",

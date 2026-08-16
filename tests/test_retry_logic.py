@@ -38,7 +38,7 @@ class TestRetryLogic(unittest.TestCase):
         client = MockHttpClient(fail_count=2)
         service = PlaceApiServiceSimulator(client)
         
-        result = service.save_place("Living Room", [0.1] * 512, max_retries=3)
+        result = service.save_place("Living Room", [[0.1] * 512], max_retries=3)
         
         self.assertTrue(result["success"])
         self.assertEqual(result["attempts"], 3)
@@ -47,10 +47,10 @@ class TestRetryLogic(unittest.TestCase):
 
     def test_all_retries_fail_surfaces_error(self):
         """Fails all 3 attempts and returns clear error response without hanging."""
-        client = MockHttpClient(fail_count=5) # More fails than max retries
+        client = MockHttpClient(fail_count=5)
         service = PlaceApiServiceSimulator(client)
 
-        result = service.save_place("Office", [0.1] * 512, max_retries=3)
+        result = service.save_place("Office", [[0.1] * 512], max_retries=3)
 
         self.assertFalse(result["success"])
         self.assertEqual(result["attempts"], 3)
