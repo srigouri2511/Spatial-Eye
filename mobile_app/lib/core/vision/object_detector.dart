@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:ui';
+import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart' as mlkit;
 
 enum ObstacleType {
   stairs,
@@ -57,9 +59,15 @@ class DetectedObject {
 
 class ObjectDetector {
   bool _isInitialized = false;
+  late mlkit.ObjectDetector _mlkitDetector;
 
   Future<void> initialize() async {
-    // In production, loads TFLite / ONNX model file
+    final options = mlkit.ObjectDetectorOptions(
+      mode: mlkit.DetectionMode.stream,
+      classifyObjects: true,
+      multipleObjects: true,
+    );
+    _mlkitDetector = mlkit.ObjectDetector(options: options);
     _isInitialized = true;
   }
 
@@ -75,14 +83,18 @@ class ObjectDetector {
       case 'table':
       case 'desk':
       case 'furniture':
+      case 'couch':
+      case 'bed':
         return ObstacleType.furniture;
       case 'car':
       case 'vehicle':
       case 'bus':
+      case 'truck':
         return ObstacleType.vehicle;
       case 'door':
         return ObstacleType.door;
       case 'person':
+      case 'human':
         return ObstacleType.person;
       case 'pothole':
         return ObstacleType.pothole;
@@ -130,40 +142,83 @@ class ObjectDetector {
     };
   }
 
-  /// Processes camera frame and returns detected objects
+  /// Processes an InputImage frame and returns detected objects
   Future<List<DetectedObject>> detectFrame(dynamic imageFrame, {bool simulation = false}) async {
     final sw = Stopwatch()..start();
     if (!_isInitialized) await initialize();
 
     List<DetectedObject> results = [];
+    
     if (simulation) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final cycle = (now / 3000) % 3;
+      // Mock logic removed to force real detection
+      return [];
+    }
 
-      if (cycle < 1) {
-        results = [
-          DetectedObject(
-            label: 'Chair',
-            type: ObstacleType.furniture,
-            confidence: 0.91,
-            bbox: BoundingBox(left: 0.35, top: 0.4, right: 0.65, bottom: 0.8),
-            distanceMeters: 1.8,
-            direction: 'slightly left',
-          ),
-        ];
-      } else if (cycle < 2) {
-        results = [
-          DetectedObject(
-            label: 'Stairs',
-            type: ObstacleType.stairs,
-            confidence: 0.95,
-            bbox: BoundingBox(left: 0.2, top: 0.3, right: 0.8, bottom: 0.9),
-            distanceMeters: 1.2,
+    if (imageFrame is mlkit.InputImage) {
+      try {
+        final mlObjects = await _mlkitDetector.processImage(imageFrame);
+        
+        final width = imageFrame.metadata?.size.width ?? 720.0;
+        final height = imageFrame.metadata?.size.height ?? 1280.0;
+
+        for (final obj in mlObjects) {
+          String labelText = 'Unknown Object';
+          double confidence = 0.5;
+          ObstacleType type = ObstacleType.unknown;
+
+          if (obj.labels.isNotEmpty) {
+            final bestLabel = obj.labels.reduce((a, b) => a.confidence > b.confidence ? a : b);
+            if (bestLabel.confidence >= 0.2) {
+              labelText = bestLabel.text;
+              confidence = bestLabel.confidence;
+              type = parseType(bestLabel.text);
+            }
+          }
+
+          final left = (obj.boundingBox.left / width).clamp(0.0, 1.0);
+          final top = (obj.boundingBox.top / height).clamp(0.0, 1.0);
+          final right = (obj.boundingBox.right / width).clamp(0.0, 1.0);
+          final bottom = (obj.boundingBox.bottom / height).clamp(0.0, 1.0);
+          
+          final bbox = BoundingBox(left: left, top: top, right: right, bottom: bottom);
+          final direction = calculateDirection(bbox.centerX);
+
+          double dist = 5.0; 
+          if (bbox.height > 0) {
+            dist = (1.0 / bbox.height).clamp(0.5, 8.0);
+          }
+
+          results.add(DetectedObject(
+            label: labelText,
+            type: type,
+            confidence: confidence,
+            bbox: bbox,
+            distanceMeters: dist,
+            direction: direction,
+          ));
+        }
+
+        // Diagnostic visual fallback
+        if (mlObjects.isEmpty) {
+           results.add(DetectedObject(
+            label: 'Scanning...',
+            type: ObstacleType.unknown,
+            confidence: 0.1,
+            bbox: BoundingBox(left: 0.4, top: 0.4, right: 0.6, bottom: 0.6),
+            distanceMeters: 6.0,
             direction: 'directly ahead',
-          ),
-        ];
-      } else {
-        results = [];
+          ));
+        }
+
+      } catch (e) {
+        results.add(DetectedObject(
+          label: 'Error: ${e.toString().split('\n').first}',
+          type: ObstacleType.unknown,
+          confidence: 1.0,
+          bbox: BoundingBox(left: 0.1, top: 0.1, right: 0.9, bottom: 0.9),
+          distanceMeters: 1.0,
+          direction: 'directly ahead',
+        ));
       }
     }
 
@@ -171,5 +226,12 @@ class ObjectDetector {
     final elapsed = sw.elapsedMicroseconds / 1000.0;
     frameLatencyMsLog.add(elapsed);
     return results;
+  }
+
+  void dispose() {
+    if (_isInitialized) {
+      _mlkitDetector.close();
+      _isInitialized = false;
+    }
   }
 }

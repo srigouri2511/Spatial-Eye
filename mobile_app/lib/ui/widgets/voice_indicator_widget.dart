@@ -17,7 +17,7 @@ class VoiceIndicatorWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: isAwaitingName ? Colors.deepPurple.shade900 : Colors.black80,
+        color: isAwaitingName ? Colors.deepPurple.shade900 : Colors.black87,
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
           color: isAwaitingName ? Colors.purpleAccent : (isListening ? Colors.cyanAccent : Colors.grey),

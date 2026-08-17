@@ -1,5 +1,5 @@
 import '../vision/danger_classifier.dart';
-
+import 'object_detector.dart';
 class MonocularDepthFallback {
   int _consecutiveDropOffFrames = 0;
 

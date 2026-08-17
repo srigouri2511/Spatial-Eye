@@ -1,3 +1,4 @@
+// Removed dart:ui
 import 'package:flutter/material.dart';
 import '../../core/vision/danger_classifier.dart';
 
@@ -32,24 +33,24 @@ class DangerRadarWidget extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: hasHighDanger ? Colors.red : Colors.cyan.withOpacity(0.5),
-            width: hasHighDanger ? 3 : 1.5,
-          ),
-          boxShadow: hasHighDanger
-              ? [
-                  BoxShadow(
-                    color: Colors.red.withOpacity(0.6),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  )
-                ]
-              : [],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+          color: Colors.transparent, // Completely transparent!
+          borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: hasHighDanger ? Colors.redAccent.withOpacity(0.8) : Colors.cyanAccent.withOpacity(0.3),
+                width: hasHighDanger ? 2.5 : 1.0,
+              ),
+              boxShadow: hasHighDanger
+                  ? [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.3),
+                        blurRadius: 30,
+                        spreadRadius: 5,
+                      )
+                    ]
+                  : [],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
