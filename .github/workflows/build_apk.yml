@@ -11,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Java JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -37,7 +37,7 @@ jobs:
           flutter build apk --release --dart-define=API_BASE_URL=https://spatial-eye-api.onrender.com/api/v1
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Spatial-Eye-Release-APK
           path: mobile_app/build/app/outputs/flutter-apk/app-release.apk
