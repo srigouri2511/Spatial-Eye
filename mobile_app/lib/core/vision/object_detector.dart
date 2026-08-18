@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:ui';
+import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart' as mlkit;
 
 enum ObstacleType {
   stairs,
@@ -57,9 +59,15 @@ class DetectedObject {
 
 class ObjectDetector {
   bool _isInitialized = false;
+  late mlkit.ObjectDetector _mlkitDetector;
 
   Future<void> initialize() async {
-    // In production, loads TFLite / ONNX model file
+    final options = mlkit.ObjectDetectorOptions(
+      mode: mlkit.DetectionMode.stream,
+      classifyObjects: true,
+      multipleObjects: true,
+    );
+    _mlkitDetector = mlkit.ObjectDetector(options: options);
     _isInitialized = true;
   }
 
@@ -75,14 +83,18 @@ class ObjectDetector {
       case 'table':
       case 'desk':
       case 'furniture':
+      case 'couch':
+      case 'bed':
         return ObstacleType.furniture;
       case 'car':
       case 'vehicle':
       case 'bus':
+      case 'truck':
         return ObstacleType.vehicle;
       case 'door':
         return ObstacleType.door;
       case 'person':
+      case 'human':
         return ObstacleType.person;
       case 'pothole':
         return ObstacleType.pothole;
@@ -130,7 +142,7 @@ class ObjectDetector {
     };
   }
 
-  /// Processes camera frame and returns detected objects
+  /// Processes an InputImage frame and returns detected objects
   Future<List<DetectedObject>> detectFrame(dynamic imageFrame, {bool simulation = false}) async {
     final sw = Stopwatch()..start();
     if (!_isInitialized) await initialize();
@@ -193,5 +205,12 @@ class ObjectDetector {
     final elapsed = sw.elapsedMicroseconds / 1000.0;
     frameLatencyMsLog.add(elapsed);
     return results;
+  }
+
+  void dispose() {
+    if (_isInitialized) {
+      _mlkitDetector.close();
+      _isInitialized = false;
+    }
   }
 }

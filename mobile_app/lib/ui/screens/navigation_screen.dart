@@ -25,10 +25,16 @@ class _NavigationScreenState extends State<NavigationScreen> {
   final SceneRecognizer _sceneRecognizer = SceneRecognizer();
   final PlaceApiService _apiService = PlaceApiService();
 
+  CameraController? _cameraController;
+  bool _isCameraInitialized = false;
+  bool _isProcessingFrame = false;
+
   List<ClassifiedDanger> _currentDangers = [];
   bool _isNavigating = true;
+  
+  // Audio Debounce State
   String _lastSpokenSummary = "";
-  Timer? _detectionTimer;
+  DateTime _lastSpokenTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -50,15 +56,33 @@ class _NavigationScreenState extends State<NavigationScreen> {
     // Listen to voice commands
     _voiceEngine.commandStream.listen(_handleVoiceCommand);
 
-    // Periodic 1-second camera detection scan cycle
-    _detectionTimer = Timer.periodic(const Duration(seconds: 1), (_) => _runDetectionLoop());
-  }
+    // Initialize Camera
+    final cameras = await availableCameras();
+    if (cameras.isNotEmpty) {
+      final backCamera = cameras.firstWhere(
+        (cam) => cam.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
 
-  Future<void> _runDetectionLoop() async {
-    if (!_isNavigating) return;
+      _cameraController = CameraController(
+        backCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: defaultTargetPlatform == TargetPlatform.iOS
+            ? ImageFormatGroup.bgra8888
+            : ImageFormatGroup.nv21,
+      );
 
-    final detectedObjects = await _detector.detectFrame(null, simulation: true);
-    final classified = _dangerClassifier.classify(detectedObjects);
+      try {
+        await _cameraController!.initialize();
+        
+        // Boost exposure to fix "dark camera" issue
+        try {
+          final maxExposure = await _cameraController!.getMaxExposureOffset();
+          // Boost by +1.0 or half of max exposure, whichever is smaller, to brighten image
+          final boost = (maxExposure * 0.5).clamp(0.0, 2.0);
+          await _cameraController!.setExposureOffset(boost);
+        } catch (_) {}
 
     setState(() {
       _currentDangers = classified;
@@ -80,6 +104,91 @@ class _NavigationScreenState extends State<NavigationScreen> {
         );
       }
     }
+  }
+
+  void _processCameraFrame(CameraImage image) async {
+    if (!_isNavigating || _isProcessingFrame || !mounted) return;
+    _isProcessingFrame = true;
+
+    try {
+      final inputImage = _convertCameraImageToInputImage(image);
+      if (inputImage != null) {
+        final detectedObjects = await _detector.detectFrame(inputImage, simulation: false);
+        final classified = _dangerClassifier.classify(detectedObjects);
+
+        if (mounted) {
+          setState(() {
+            _currentDangers = classified;
+          });
+        }
+
+        if (classified.isNotEmpty) {
+          final topDanger = classified.first;
+          
+          // Debounce logic: only speak if highly dangerous AND (different from last OR > 10 seconds ago)
+          if (topDanger.isEscalated || topDanger.level == DangerLevel.high) {
+            final speechText = _dangerClassifier.generateSpokenSummary(classified);
+            
+            final now = DateTime.now();
+            final timeSinceLast = now.difference(_lastSpokenTime);
+
+            if (speechText != _lastSpokenSummary || timeSinceLast.inSeconds > 10) {
+              _lastSpokenSummary = speechText;
+              _lastSpokenTime = now;
+              
+              if (topDanger.level == DangerLevel.high) {
+                HapticFeedback.heavyImpact();
+              } else {
+                HapticFeedback.mediumImpact();
+              }
+
+              await _audioQueue.enqueue(
+                text: speechText,
+                dangerLevel: topDanger.level,
+                playTone: true,
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error processing frame: $e");
+    } finally {
+      if (mounted) {
+        _isProcessingFrame = false;
+      }
+    }
+  }
+
+  mlkit.InputImage? _convertCameraImageToInputImage(CameraImage image) {
+    if (_cameraController == null) return null;
+    
+    final WriteBuffer allBytes = WriteBuffer();
+    for (final Plane plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
+    }
+    final bytes = allBytes.done().buffer.asUint8List();
+
+    final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
+    
+    final camera = _cameraController!.description;
+    final imageRotation = mlkit.InputImageRotationValue.fromRawValue(camera.sensorOrientation);
+    if (imageRotation == null) return null;
+
+    final formatFromRaw = mlkit.InputImageFormatValue.fromRawValue(image.format.raw);
+    final inputImageFormat = formatFromRaw ?? 
+        (defaultTargetPlatform == TargetPlatform.android 
+            ? mlkit.InputImageFormat.nv21 
+            : mlkit.InputImageFormat.bgra8888);
+
+    final inputImageData = mlkit.InputImageMetadata(
+      size: imageSize,
+      rotation: imageRotation,
+      format: inputImageFormat,
+      bytesPerRow: image.planes[0].bytesPerRow,
+    );
+
+    return mlkit.InputImage.fromBytes(bytes: bytes, metadata: inputImageData);
   }
 
   void _handleVoiceCommand(VoiceCommand command) async {
@@ -146,6 +255,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
       case VoiceCommandIntent.querySurroundings:
         final summary = _dangerClassifier.generateSpokenSummary(_currentDangers);
         _lastSpokenSummary = summary;
+        _lastSpokenTime = DateTime.now();
         await _audioQueue.enqueue(
           text: summary,
           dangerLevel: _currentDangers.isNotEmpty ? _currentDangers.first.level : DangerLevel.none,
@@ -216,7 +326,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   @override
   void dispose() {
-    _detectionTimer?.cancel();
+    _cameraController?.dispose();
+    _detector.dispose();
     _voiceEngine.stopListening();
     _audioQueue.stop();
     super.dispose();
@@ -272,10 +383,27 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Danger Radar Overlay Widget
+              // Danger Radar Overlay Widget (with optional Camera Preview behind it)
               Expanded(
-                child: DangerRadarWidget(
-                  classifiedDangers: _currentDangers,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (_isCameraInitialized && _isNavigating)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _cameraController!.value.previewSize?.height ?? 1,
+                            height: _cameraController!.value.previewSize?.width ?? 1,
+                            child: CameraPreview(_cameraController!),
+                          ),
+                        ),
+                      ),
+                    DangerRadarWidget(
+                      classifiedDangers: _currentDangers,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
