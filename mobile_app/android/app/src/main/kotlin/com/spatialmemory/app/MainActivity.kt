@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.ar.core.Session
@@ -26,6 +25,9 @@ import com.spatialmemory.app.voice.MappingTrigger
 import com.spatialmemory.app.voice.MappingVoiceGuide
 import com.spatialmemory.app.voice.QueryResponder
 import com.spatialmemory.app.voice.VoiceQueryManager
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugins.GeneratedPluginRegistrant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -34,10 +36,14 @@ import kotlinx.coroutines.withContext
 /**
  * Main Activity driving the end-to-end Spatial Memory Assistant experience.
  *
- * Coordinates ARCore SLAM sessions, camera processing loops, runtime permissions,
- * voice query listening, and room setup mapping flows.
+ * Extends [FlutterActivity] for Android v2 embedding compatibility.
  */
-class MainActivity : AppCompatActivity(), MappingTrigger {
+class MainActivity : FlutterActivity(), MappingTrigger {
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        GeneratedPluginRegistrant.registerWith(flutterEngine)
+    }
 
     private lateinit var database: SpatialMemoryDatabase
     private lateinit var arSessionManager: ArSessionManager
