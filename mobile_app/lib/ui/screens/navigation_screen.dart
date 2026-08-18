@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../main.dart';
 import '../../core/vision/object_detector.dart';
 import '../../core/vision/danger_classifier.dart';
 import '../../core/audio/priority_audio_queue.dart';
@@ -65,15 +66,17 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
     if (classified.isNotEmpty) {
       final topDanger = classified.first;
-      
-      // If escalated or high danger, speak immediately
-      if (topDanger.isEscalated || topDanger.level == DangerLevel.high) {
-        final speechText = _dangerClassifier.generateSpokenSummary(classified);
+      final speechText = _dangerClassifier.generateSpokenSummary(classified);
+
+      // Speak audio whenever danger is escalated, high priority, or newly changed summary
+      if (topDanger.isEscalated ||
+          topDanger.level == DangerLevel.high ||
+          _lastSpokenSummary != speechText) {
         _lastSpokenSummary = speechText;
         await _audioQueue.enqueue(
           text: speechText,
           dangerLevel: topDanger.level,
-          playTone: true,
+          playTone: topDanger.level == DangerLevel.high || topDanger.level == DangerLevel.medium,
         );
       }
     }
@@ -84,10 +87,22 @@ class _NavigationScreenState extends State<NavigationScreen> {
       case VoiceCommandIntent.openCamera:
         setState(() => _isNavigating = true);
         await _audioQueue.enqueue(
-          text: "Camera activated. Scanning path ahead.",
+          text: "Camera activated. Scanning path ahead for obstacles.",
           dangerLevel: DangerLevel.none,
           playTone: false,
         );
+        break;
+
+      case VoiceCommandIntent.toggleTheme:
+        final targetMode = command.payload == "light" ? ThemeMode.light : ThemeMode.dark;
+        SpatialEyeApp.of(context)?.toggleTheme(targetMode);
+        final modeText = targetMode == ThemeMode.light ? "Light mode" : "Dark mode";
+        await _audioQueue.enqueue(
+          text: "UI theme changed to $modeText.",
+          dangerLevel: DangerLevel.none,
+          playTone: false,
+        );
+        setState(() {});
         break;
 
       case VoiceCommandIntent.savePlace:
@@ -191,7 +206,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
       case VoiceCommandIntent.unknown:
         await _audioQueue.enqueue(
-          text: "Command not recognized. Say 'what's in front of me', 'save this place', or 'stop'.",
+          text: "Command not recognized. Say 'what's in front of me', 'on camera', 'change ui to light', or 'stop'.",
           dangerLevel: DangerLevel.none,
           playTone: false,
         );
@@ -209,18 +224,33 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           "SPATIAL EYE",
-          style: TextStyle(fontWeight: FontWeight.black, letterSpacing: 2, color: Colors.white),
+          style: TextStyle(
+            fontWeight: FontWeight.black,
+            letterSpacing: 2,
+            color: isDark ? Colors.white : Colors.black80,
+          ),
         ),
-        backgroundColor: Colors.black,
-        elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(_isNavigating ? Icons.pause : Icons.play_arrow, color: Colors.cyanAccent),
+            icon: Icon(
+              isDark ? Icons.light_mode : Icons.dark_mode,
+              color: primaryColor,
+            ),
+            tooltip: isDark ? "Switch to Light Mode" : "Switch to Dark Mode",
+            onPressed: () {
+              _voiceEngine.simulateSpokenCommand(isDark ? "change ui to light" : "change ui to dark");
+            },
+          ),
+          IconButton(
+            icon: Icon(_isNavigating ? Icons.pause : Icons.play_arrow, color: primaryColor),
+            tooltip: _isNavigating ? "Pause Camera" : "Turn On Camera",
             onPressed: () {
               _voiceEngine.simulateSpokenCommand(_isNavigating ? "stop" : "open camera");
             },
@@ -238,7 +268,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                 isAwaitingName: _voiceEngine.isAwaitingPlaceName,
                 statusText: _voiceEngine.isAwaitingPlaceName
                     ? "Say location name..."
-                    : (_isNavigating ? "Listening for voice..." : "Paused"),
+                    : (_isNavigating ? "Listening for voice..." : "Camera Paused"),
               ),
               const SizedBox(height: 16),
 
@@ -259,24 +289,30 @@ class _NavigationScreenState extends State<NavigationScreen> {
                 mainAxisSpacing: 10,
                 children: [
                   _buildVoiceButton(
+                    context: context,
                     icon: Icons.search,
                     label: "What's Ahead?",
                     onTap: () => _voiceEngine.simulateSpokenCommand("what's in front of me"),
                   ),
                   _buildVoiceButton(
-                    icon: Icons.bookmark_add,
-                    label: "Save Place",
-                    onTap: () => _voiceEngine.simulateSpokenCommand("save this place"),
+                    context: context,
+                    icon: isDark ? Icons.light_mode : Icons.dark_mode,
+                    label: isDark ? "Light UI" : "Dark UI",
+                    onTap: () => _voiceEngine.simulateSpokenCommand(
+                      isDark ? "change ui to light" : "change ui to dark",
+                    ),
                   ),
                   _buildVoiceButton(
+                    context: context,
                     icon: Icons.my_location,
                     label: "Where Am I?",
                     onTap: () => _voiceEngine.simulateSpokenCommand("where am i"),
                   ),
                   _buildVoiceButton(
-                    icon: Icons.replay,
-                    label: "Repeat Alert",
-                    onTap: () => _voiceEngine.simulateSpokenCommand("repeat"),
+                    context: context,
+                    icon: Icons.bookmark_add,
+                    label: "Save Place",
+                    onTap: () => _voiceEngine.simulateSpokenCommand("save this place"),
                   ),
                 ],
               ),
@@ -288,19 +324,24 @@ class _NavigationScreenState extends State<NavigationScreen> {
   }
 
   Widget _buildVoiceButton({
+    required BuildContext context,
     required IconData icon,
     required String label,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.grey.shade900,
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: Colors.white24),
+        backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black80,
+        elevation: isDark ? 0 : 2,
+        side: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       onPressed: onTap,
-      icon: Icon(icon, color: Colors.cyanAccent),
+      icon: Icon(icon, color: primaryColor),
       label: Text(
         label,
         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),

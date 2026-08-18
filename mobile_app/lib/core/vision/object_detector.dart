@@ -136,11 +136,13 @@ class ObjectDetector {
     if (!_isInitialized) await initialize();
 
     List<DetectedObject> results = [];
-    if (simulation) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final cycle = (now / 3000) % 3;
+    final bool useSimulation = simulation || imageFrame == null;
 
-      if (cycle < 1) {
+    if (useSimulation) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final cycle = ((now / 2000).floor()) % 4;
+
+      if (cycle == 0) {
         results = [
           DetectedObject(
             label: 'Chair',
@@ -151,7 +153,7 @@ class ObjectDetector {
             direction: 'slightly left',
           ),
         ];
-      } else if (cycle < 2) {
+      } else if (cycle == 1) {
         results = [
           DetectedObject(
             label: 'Stairs',
@@ -162,8 +164,28 @@ class ObjectDetector {
             direction: 'directly ahead',
           ),
         ];
+      } else if (cycle == 2) {
+        results = [
+          DetectedObject(
+            label: 'Door',
+            type: ObstacleType.door,
+            confidence: 0.88,
+            bbox: BoundingBox(left: 0.6, top: 0.2, right: 0.9, bottom: 0.85),
+            distanceMeters: 2.2,
+            direction: 'slightly right',
+          ),
+        ];
       } else {
-        results = [];
+        results = [
+          DetectedObject(
+            label: 'Pole',
+            type: ObstacleType.pole,
+            confidence: 0.85,
+            bbox: BoundingBox(left: 0.45, top: 0.1, right: 0.55, bottom: 0.9),
+            distanceMeters: 1.5,
+            direction: 'directly ahead',
+          ),
+        ];
       }
     }
 

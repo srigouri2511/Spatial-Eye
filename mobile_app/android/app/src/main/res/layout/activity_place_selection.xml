@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#121212">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Saved Places"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:paddingBottom="16dp"
+        android:contentDescription="Saved Places List Header" />
+
+    <ListView
+        android:id="@+id/listViewPlaces"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="#333333"
+        android:dividerHeight="1dp" />
+
+    <Button
+        android:id="@+id/btnScanNewRoom"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginTop="16dp"
+        android:text="+ Scan New Room"
+        android:textSize="18sp"
+        android:backgroundTint="#1976D2"
+        android:textColor="#FFFFFF"
+        android:contentDescription="Scan New Room Button. Double tap to begin mapping." />
+
+</LinearLayout>

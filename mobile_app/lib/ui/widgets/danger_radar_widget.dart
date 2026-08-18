@@ -24,18 +24,23 @@ class DangerRadarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasHighDanger = classifiedDangers.any((d) => d.level == DangerLevel.high);
     final topDanger = classifiedDangers.isNotEmpty ? classifiedDangers.first : null;
+    final textColor = isDark ? Colors.white : Colors.black80;
+    final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
 
     return Semantics(
       label: topDanger != null ? topDanger.description : "Path clear",
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.85),
+          color: isDark ? Colors.black.withOpacity(0.85) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: hasHighDanger ? Colors.red : Colors.cyan.withOpacity(0.5),
+            color: hasHighDanger
+                ? Colors.red
+                : (isDark ? Colors.cyan.withOpacity(0.5) : Colors.blue.withOpacity(0.4)),
             width: hasHighDanger ? 3 : 1.5,
           ),
           boxShadow: hasHighDanger
@@ -46,7 +51,13 @@ class DangerRadarWidget extends StatelessWidget {
                     spreadRadius: 2,
                   )
                 ]
-              : [],
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  )
+                ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -58,14 +69,14 @@ class DangerRadarWidget extends StatelessWidget {
                   children: [
                     Icon(
                       hasHighDanger ? Icons.warning_amber_rounded : Icons.radar,
-                      color: topDanger != null ? _getDangerColor(topDanger.level) : Colors.greenAccent,
+                      color: topDanger != null ? _getDangerColor(topDanger.level) : Colors.green,
                       size: 28,
                     ),
                     const SizedBox(width: 10),
                     Text(
                       topDanger != null ? topDanger.level.name.toUpperCase() + " DANGER" : "PATH CLEAR",
                       style: TextStyle(
-                        color: topDanger != null ? _getDangerColor(topDanger.level) : Colors.greenAccent,
+                        color: topDanger != null ? _getDangerColor(topDanger.level) : (isDark ? Colors.greenAccent : Colors.green.shade700),
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.2,
@@ -76,23 +87,23 @@ class DangerRadarWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white10,
+                    color: isDark ? Colors.white10 : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     "${classifiedDangers.length} Obstacle(s)",
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: TextStyle(color: secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 )
               ],
             ),
             const SizedBox(height: 12),
             if (classifiedDangers.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
                   "Nothing detected ahead",
-                  style: TextStyle(color: Colors.white70, fontSize: 18, fontStyle: FontStyle.italic),
+                  style: TextStyle(color: secondaryTextColor, fontSize: 18, fontStyle: FontStyle.italic),
                 ),
               )
             else
@@ -102,7 +113,7 @@ class DangerRadarWidget extends StatelessWidget {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: _getDangerColor(d.level).withOpacity(0.15),
+                      color: _getDangerColor(d.level).withOpacity(isDark ? 0.15 : 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -112,8 +123,8 @@ class DangerRadarWidget extends StatelessWidget {
                         Expanded(
                           child: Text(
                             d.description,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: textColor,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
