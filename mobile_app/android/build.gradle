@@ -18,19 +18,9 @@ tasks.register("clean", Delete) {
 }
 
 subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                if (project.android.namespace == null) {
-                    namespace project.group
-                }
-            }
-        }
-    }
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile.class).configureEach {
         kotlinOptions {
             jvmTarget = "17"
         }
     }
 }
-
