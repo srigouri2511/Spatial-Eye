@@ -19,7 +19,7 @@ tasks.register("clean", Delete) {
 
 subprojects {
     afterEvaluate { project ->
-        if (project.hasProperty('android')) {
+        if (project.plugins.hasPlugin('com.android.base')) {
             try {
                 project.android {
                     compileOptions {
@@ -27,7 +27,7 @@ subprojects {
                         targetCompatibility JavaVersion.VERSION_17
                     }
                 }
-            } catch (Exception e) {}
+            } catch (Throwable e) {}
         }
         project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
             sourceCompatibility = JavaVersion.VERSION_17
@@ -37,7 +37,7 @@ subprojects {
             if (task.name.toLowerCase().contains("kotlin")) {
                 try {
                     task.kotlinOptions.jvmTarget = "17"
-                } catch (Exception e) {}
+                } catch (Throwable e) {}
             }
         }
     }
