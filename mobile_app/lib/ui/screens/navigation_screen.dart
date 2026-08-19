@@ -93,7 +93,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
       });
 
       if (_currentThreat != null) {
-        _lastStatus = "\${_currentThreat!.obstacle.label} \${_currentThreat!.zone.name}";
+        _lastStatus = "${_currentThreat!.obstacle.label} ${_currentThreat!.zone.name}";
         await _engine.processThreat(_currentThreat!);
       } else {
         _lastStatus = "Clear path";
@@ -190,15 +190,15 @@ class _NavigationScreenState extends State<NavigationScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "Status: \${_isNavigating ? 'ACTIVE' : 'PAUSED'}",
+                        "Status: ${_isNavigating ? 'ACTIVE' : 'PAUSED'}",
                         style: const TextStyle(color: Colors.white70),
                       ),
                       Text(
-                        "Quiet Mode: \${_engine.quietMode ? 'ON' : 'OFF'}",
+                        "Quiet Mode: ${_engine.quietMode ? 'ON' : 'OFF'}",
                         style: const TextStyle(color: Colors.white70),
                       ),
                       Text(
-                        "FPS: \${_currentFps.toStringAsFixed(1)}",
+                        "FPS: ${_currentFps.toStringAsFixed(1)}",
                         style: const TextStyle(color: Colors.white70),
                       ),
                       const Spacer(),
@@ -211,7 +211,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                             border: Border.all(color: Colors.white24),
                           ),
                           child: Text(
-                            "Threat: \${_currentThreat!.obstacle.label} | Zone: \${_currentThreat!.zone.name} | Lvl: \${_currentThreat!.level.name}",
+                            "Threat: ${_currentThreat!.obstacle.label} | Zone: ${_currentThreat!.zone.name} | Lvl: ${_currentThreat!.level.name}",
                             style: const TextStyle(color: Colors.white, fontSize: 16),
                           ),
                         )
