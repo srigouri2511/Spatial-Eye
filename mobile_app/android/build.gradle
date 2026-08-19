@@ -18,10 +18,16 @@ tasks.register("clean", Delete) {
 }
 
 subprojects {
-    afterEvaluate { project ->
-        if (project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
-            project.kotlin {
-                jvmToolchain(17)
+    tasks.withType(JavaCompile).configureEach {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    tasks.configureEach { task ->
+        if (task.name.toLowerCase().contains("kotlin")) {
+            try {
+                task.kotlinOptions.jvmTarget = "17"
+            } catch (Exception e) {
+                // Ignore if it's not a KotlinCompile task
             }
         }
     }
