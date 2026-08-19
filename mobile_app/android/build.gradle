@@ -18,10 +18,7 @@ tasks.register("clean", Delete) {
 }
 
 subprojects {
-    tasks.withType(JavaCompile).configureEach {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
+
     tasks.configureEach { task ->
         if (task.name.toLowerCase().contains("kotlin")) {
             try {
