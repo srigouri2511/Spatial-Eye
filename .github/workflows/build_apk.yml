@@ -36,16 +36,9 @@ jobs:
 
       - name: Build Android Release APK
         working-directory: mobile_app
-        run: |
-          flutter build apk --release > build_log.txt 2>&1 || (flutter build apk --release --verbose >> build_log.txt 2>&1)
-          if [ $? -ne 0 ]; then
-            git config --global user.name "github-actions"
-            git config --global user.email "github-actions@github.com"
-            git add build_log.txt
-            git commit -m "Upload failed build log"
-            git push
-            exit 1
-          fi
+        run: flutter build apk --release
+        env:
+          GRADLE_OPTS: "-Xmx2048m"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
