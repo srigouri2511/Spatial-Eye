@@ -31,7 +31,7 @@ jobs:
 
       - name: Build APK
         working-directory: mobile_app
-        run: flutter build apk --release
+        run: flutter build apk --release --verbose
         env:
           GRADLE_OPTS: "-Xmx2048m"
 
