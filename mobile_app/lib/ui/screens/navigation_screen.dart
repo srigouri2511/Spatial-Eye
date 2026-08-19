@@ -1,18 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
-import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart' as mlkit;
+import 'package:flutter/semantics.dart';
 
-import '../../core/vision/object_detector.dart';
-import '../../core/vision/danger_classifier.dart';
-import '../../core/audio/priority_audio_queue.dart';
-import '../../core/voice/voice_command_engine.dart';
-import '../../core/scene/scene_recognizer.dart';
-import '../../services/place_api_service.dart';
-import '../widgets/danger_radar_widget.dart';
-import '../widgets/voice_indicator_widget.dart';
+import '../../core/vision/yolo_detector.dart';
+import '../../core/vision/obstacle_detector.dart';
+import '../../core/feedback/threat_prioritizer.dart';
+import '../../core/feedback/audio_haptic_engine.dart';
 
 class NavigationScreen extends StatefulWidget {
   const NavigationScreen({Key? key}) : super(key: key);
@@ -22,45 +16,31 @@ class NavigationScreen extends StatefulWidget {
 }
 
 class _NavigationScreenState extends State<NavigationScreen> {
-  final ObjectDetector _detector = ObjectDetector();
-  final DangerClassifier _dangerClassifier = DangerClassifier();
-  final PriorityAudioQueue _audioQueue = PriorityAudioQueue();
-  final VoiceCommandEngine _voiceEngine = VoiceCommandEngine();
-  final SceneRecognizer _sceneRecognizer = SceneRecognizer();
-  final PlaceApiService _apiService = PlaceApiService();
-
+  final YoloDetector _detector = YoloDetector();
+  final AudioHapticEngine _engine = AudioHapticEngine();
+  
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
-  bool _isProcessingFrame = false;
-
-  List<ClassifiedDanger> _currentDangers = [];
   bool _isNavigating = true;
-  
-  // Audio Debounce State
-  String _lastSpokenSummary = "";
-  DateTime _lastSpokenTime = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // HUD Data
+  List<DetectedObstacle> _currentObstacles = [];
+  AnalyzedThreat? _currentThreat;
+  int _frameCount = 0;
+  DateTime _lastFpsTime = DateTime.now();
+  double _currentFps = 0.0;
+  String _lastStatus = "Clear path";
 
   @override
   void initState() {
     super.initState();
-    _initEngine();
+    _initSystem();
   }
 
-  Future<void> _initEngine() async {
+  Future<void> _initSystem() async {
+    await _engine.initialize();
     await _detector.initialize();
-    await _voiceEngine.startListening();
 
-    // Welcome voice announcement
-    await _audioQueue.enqueue(
-      text: "Spatial Eye ready. Always-listening voice mode active. Camera scan started.",
-      dangerLevel: DangerLevel.none,
-      playTone: false,
-    );
-
-    // Listen to voice commands
-    _voiceEngine.commandStream.listen(_handleVoiceCommand);
-
-    // Initialize Camera
     final cameras = await availableCameras();
     if (cameras.isNotEmpty) {
       final backCamera = cameras.firstWhere(
@@ -70,24 +50,13 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
       _cameraController = CameraController(
         backCamera,
-        ResolutionPreset.high,
+        ResolutionPreset.low, // Lower resolution for faster inference
         enableAudio: false,
-        imageFormatGroup: defaultTargetPlatform == TargetPlatform.iOS
-            ? ImageFormatGroup.bgra8888
-            : ImageFormatGroup.nv21,
+        imageFormatGroup: ImageFormatGroup.yuv420,
       );
 
       try {
         await _cameraController!.initialize();
-        
-        // Boost exposure to fix "dark camera" issue
-        try {
-          final maxExposure = await _cameraController!.getMaxExposureOffset();
-          // Boost by +1.0 or half of max exposure, whichever is smaller, to brighten image
-          final boost = (maxExposure * 0.5).clamp(0.0, 2.0);
-          await _cameraController!.setExposureOffset(boost);
-        } catch (_) {}
-
         if (mounted) {
           setState(() {
             _isCameraInitialized = true;
@@ -95,340 +64,164 @@ class _NavigationScreenState extends State<NavigationScreen> {
           _cameraController!.startImageStream(_processCameraFrame);
         }
       } catch (e) {
-        debugPrint("Error initializing camera: $e");
+        _engine.speak("Camera obscured or failed to initialize.");
       }
     }
   }
 
-  void _processCameraFrame(CameraImage image) async {
-    if (!_isNavigating || _isProcessingFrame || !mounted) return;
-    _isProcessingFrame = true;
+  void _processCameraFrame(CameraImage image) {
+    if (!_isNavigating || !mounted) return;
 
-    try {
-      final inputImage = _convertCameraImageToInputImage(image);
-      if (inputImage != null) {
-        final detectedObjects = await _detector.detectFrame(inputImage, simulation: false);
-        final classified = _dangerClassifier.classify(detectedObjects);
-
-        if (mounted) {
-          setState(() {
-            _currentDangers = classified;
-          });
-        }
-
-        if (classified.isNotEmpty) {
-          final topDanger = classified.first;
-          
-          // Debounce logic: only speak if highly dangerous AND (different from last OR > 10 seconds ago)
-          if (topDanger.isEscalated || topDanger.level == DangerLevel.high) {
-            final speechText = _dangerClassifier.generateSpokenSummary(classified);
-            
-            final now = DateTime.now();
-            final timeSinceLast = now.difference(_lastSpokenTime);
-
-            if (speechText != _lastSpokenSummary || timeSinceLast.inSeconds > 10) {
-              _lastSpokenSummary = speechText;
-              _lastSpokenTime = now;
-              
-              if (topDanger.level == DangerLevel.high) {
-                HapticFeedback.heavyImpact();
-              } else {
-                HapticFeedback.mediumImpact();
-              }
-
-              await _audioQueue.enqueue(
-                text: speechText,
-                dangerLevel: topDanger.level,
-                playTone: true,
-              );
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Error processing frame: $e");
-    } finally {
+    // Calculate FPS
+    _frameCount++;
+    final now = DateTime.now();
+    if (now.difference(_lastFpsTime).inSeconds >= 1) {
       if (mounted) {
-        _isProcessingFrame = false;
+        setState(() {
+          _currentFps = _frameCount / now.difference(_lastFpsTime).inSeconds;
+        });
       }
+      _frameCount = 0;
+      _lastFpsTime = now;
+    }
+
+    _detector.processFrame(image).listen((obstacles) async {
+      if (!mounted) return;
+      setState(() {
+        _currentObstacles = obstacles;
+        _currentThreat = ThreatPrioritizer.getMostImminentThreat(obstacles);
+      });
+
+      if (_currentThreat != null) {
+        _lastStatus = "\${_currentThreat!.obstacle.label} \${_currentThreat!.zone.name}";
+        await _engine.processThreat(_currentThreat!);
+      } else {
+        _lastStatus = "Clear path";
+      }
+    });
+  }
+
+  void _handleSingleTap() {
+    _engine.speak(_lastStatus);
+  }
+
+  void _handleDoubleTap() {
+    setState(() {
+      _isNavigating = !_isNavigating;
+    });
+    if (_isNavigating) {
+      _engine.speak("Radar resumed.");
+    } else {
+      _engine.speak("Radar paused.");
     }
   }
 
-  mlkit.InputImage? _convertCameraImageToInputImage(CameraImage image) {
-    if (_cameraController == null) return null;
-    
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
-    }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
-    
-    final camera = _cameraController!.description;
-    final imageRotation = mlkit.InputImageRotationValue.fromRawValue(camera.sensorOrientation);
-    if (imageRotation == null) return null;
-
-    final formatFromRaw = mlkit.InputImageFormatValue.fromRawValue(image.format.raw);
-    final inputImageFormat = formatFromRaw ?? 
-        (defaultTargetPlatform == TargetPlatform.android 
-            ? mlkit.InputImageFormat.nv21 
-            : mlkit.InputImageFormat.bgra8888);
-
-    final inputImageData = mlkit.InputImageMetadata(
-      size: imageSize,
-      rotation: imageRotation,
-      format: inputImageFormat,
-      bytesPerRow: image.planes[0].bytesPerRow,
-    );
-
-    return mlkit.InputImage.fromBytes(bytes: bytes, metadata: inputImageData);
+  void _handleTwoFingerTap() {
+    _engine.speak("System running. Camera active. F P S is ${_currentFps.toInt()}.");
   }
 
-  void _handleVoiceCommand(VoiceCommand command) async {
-    switch (command.intent) {
-      case VoiceCommandIntent.openCamera:
-        setState(() => _isNavigating = true);
-        await _audioQueue.enqueue(
-          text: "Camera activated. Scanning path ahead.",
-          dangerLevel: DangerLevel.none,
-          playTone: false,
-        );
-        break;
-
-      case VoiceCommandIntent.savePlace:
-        _voiceEngine.isAwaitingPlaceName = true;
-        setState(() {});
-        await _audioQueue.enqueue(
-          text: "Saving current location. Please state the name of this place now.",
-          dangerLevel: DangerLevel.none,
-          playTone: false,
-        );
-        break;
-
-      case VoiceCommandIntent.providePlaceName:
-        final placeName = command.payload ?? "Saved Location";
-        final sceneVec = _sceneRecognizer.extractFeatureEmbedding(null);
-        await _audioQueue.enqueue(
-          text: "Saving place as $placeName. Please wait.",
-          dangerLevel: DangerLevel.none,
-          playTone: false,
-        );
-
-        try {
-          await _apiService.savePlace(
-            name: placeName,
-            embeddings: [sceneVec.values],
-          );
-          await _audioQueue.enqueue(
-            text: "Saved as $placeName.",
-            dangerLevel: DangerLevel.none,
-            playTone: false,
-          );
-        } catch (e) {
-          await _audioQueue.enqueue(
-            text: "Notice: Saved as $placeName offline.",
-            dangerLevel: DangerLevel.none,
-            playTone: false,
-          );
-        }
-        break;
-
-      case VoiceCommandIntent.querySurroundings:
-        final summary = _dangerClassifier.generateSpokenSummary(_currentDangers);
-        _lastSpokenSummary = summary;
-        _lastSpokenTime = DateTime.now();
-        await _audioQueue.enqueue(
-          text: summary,
-          dangerLevel: _currentDangers.isNotEmpty ? _currentDangers.first.level : DangerLevel.none,
-          playTone: false,
-        );
-        break;
-
-      case VoiceCommandIntent.whereAmI:
-        final sceneVec = _sceneRecognizer.extractFeatureEmbedding(null);
-        await _audioQueue.enqueue(
-          text: "Scanning environment...",
-          dangerLevel: DangerLevel.none,
-          playTone: false,
-        );
-
-        final matches = await _apiService.recognizePlace(embedding: sceneVec.values);
-        if (matches.isNotEmpty) {
-          final topMatch = matches.first;
-          await _audioQueue.enqueue(
-            text: "You are currently in ${topMatch.name}.",
-            dangerLevel: DangerLevel.none,
-            playTone: false,
-          );
-        } else {
-          await _audioQueue.enqueue(
-            text: "Unrecognized location. Say 'save this place' to bookmark it.",
-            dangerLevel: DangerLevel.none,
-            playTone: false,
-          );
-        }
-        break;
-
-      case VoiceCommandIntent.repeatLast:
-        if (_lastSpokenSummary.isNotEmpty) {
-          await _audioQueue.enqueue(
-            text: _lastSpokenSummary,
-            dangerLevel: DangerLevel.none,
-            playTone: false,
-          );
-        } else {
-          await _audioQueue.enqueue(
-            text: "No recent alerts.",
-            dangerLevel: DangerLevel.none,
-            playTone: false,
-          );
-        }
-        break;
-
-      case VoiceCommandIntent.stop:
-        setState(() => _isNavigating = false);
-        await _audioQueue.stop();
-        await _audioQueue.enqueue(
-          text: "Navigation paused.",
-          dangerLevel: DangerLevel.none,
-          playTone: false,
-        );
-        break;
-
-      case VoiceCommandIntent.unknown:
-        await _audioQueue.enqueue(
-          text: "Command not recognized. Say 'what's in front of me', 'save this place', or 'stop'.",
-          dangerLevel: DangerLevel.none,
-          playTone: false,
-        );
-        break;
-    }
+  void _handleLongPress() {
+    _engine.toggleQuietMode();
   }
 
   @override
   void dispose() {
     _cameraController?.dispose();
     _detector.dispose();
-    _voiceEngine.stopListening();
-    _audioQueue.stop();
+    _engine.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Generate background color based on threat
+    Color bgColor = Colors.black;
+    if (_currentThreat != null) {
+      if (_currentThreat!.level == ThreatLevel.critical) {
+        bgColor = Colors.red.shade900;
+      } else if (_currentThreat!.level == ThreatLevel.medium) {
+        bgColor = Colors.amber.shade900;
+      } else {
+        bgColor = Colors.green.shade900;
+      }
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text(
-          "SPATIAL EYE",
-          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2, color: Colors.white),
-        ),
-        backgroundColor: Colors.black,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(_isNavigating ? Icons.pause : Icons.play_arrow, color: Colors.cyanAccent),
-            onPressed: () {
-              _voiceEngine.simulateSpokenCommand(_isNavigating ? "stop" : "open camera");
-            },
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
+      body: Semantics(
+        label: "Spatial Eye Navigation Radar. Single tap to hear status, double tap to pause, two finger tap for diagnostics, long press for quiet mode.",
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleSingleTap,
+          onDoubleTap: _handleDoubleTap,
+          onLongPress: _handleLongPress,
+          // Two-finger tap hack using ScaleStart
+          onScaleStart: (details) {
+            if (details.pointerCount == 2) {
+              _handleTwoFingerTap();
+            }
+          },
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              // Voice Indicator Header
-              VoiceIndicatorWidget(
-                isListening: _voiceEngine.isListening,
-                isAwaitingName: _voiceEngine.isAwaitingPlaceName,
-                statusText: _voiceEngine.isAwaitingPlaceName
-                    ? "Say location name..."
-                    : (_isNavigating ? "Listening for voice..." : "Paused"),
-              ),
-              const SizedBox(height: 16),
-
-              // Danger Radar Overlay Widget (with optional Camera Preview behind it)
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (_isCameraInitialized && _isNavigating)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _cameraController!.value.previewSize?.height ?? 1,
-                            height: _cameraController!.value.previewSize?.width ?? 1,
-                            child: CameraPreview(_cameraController!),
-                          ),
-                        ),
-                      ),
-                    DangerRadarWidget(
-                      classifiedDangers: _currentDangers,
-                    ),
-                  ],
+              // Diagnostic HUD Layer
+              if (_isCameraInitialized)
+                Opacity(
+                  opacity: 0.3,
+                  child: CameraPreview(_cameraController!),
                 ),
+              
+              // Radar color overlay
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                color: bgColor.withOpacity(0.5),
               ),
-              const SizedBox(height: 16),
 
-              // Voice Command Touch Fallbacks (Accessibility friendly large targets)
-              GridView.count(
-                shrinkWrap: true,
-                crossAxisCount: 2,
-                childAspectRatio: 2.5,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                children: [
-                  _buildVoiceButton(
-                    icon: Icons.search,
-                    label: "What's Ahead?",
-                    onTap: () => _voiceEngine.simulateSpokenCommand("what's in front of me"),
+              // HUD Text
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "SPATIAL EYE HUD",
+                        style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Status: \${_isNavigating ? 'ACTIVE' : 'PAUSED'}",
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      Text(
+                        "Quiet Mode: \${_engine.quietMode ? 'ON' : 'OFF'}",
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      Text(
+                        "FPS: \${_currentFps.toStringAsFixed(1)}",
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      const Spacer(),
+                      if (_currentThreat != null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: Text(
+                            "Threat: \${_currentThreat!.obstacle.label} | Zone: \${_currentThreat!.zone.name} | Lvl: \${_currentThreat!.level.name}",
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        )
+                    ],
                   ),
-                  _buildVoiceButton(
-                    icon: Icons.bookmark_add,
-                    label: "Save Place",
-                    onTap: () => _voiceEngine.simulateSpokenCommand("save this place"),
-                  ),
-                  _buildVoiceButton(
-                    icon: Icons.my_location,
-                    label: "Where Am I?",
-                    onTap: () => _voiceEngine.simulateSpokenCommand("where am i"),
-                  ),
-                  _buildVoiceButton(
-                    icon: Icons.replay,
-                    label: "Repeat Alert",
-                    onTap: () => _voiceEngine.simulateSpokenCommand("repeat"),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildVoiceButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.grey.shade900,
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: Colors.white24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      onPressed: onTap,
-      icon: Icon(icon, color: Colors.cyanAccent),
-      label: Text(
-        label,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
       ),
     );
   }

@@ -16,7 +16,10 @@ dependencies:
   provider: ^6.1.1
   vector_math: ^2.1.4
   camera: ^0.12.0+2
-  google_mlkit_object_detection: ^0.16.0
+  tflite_flutter: ^0.10.4
+  vibration: ^1.8.3
+  sensors_plus: ^5.0.1
+  flutter_riverpod: ^2.5.1
 
 dev_dependencies:
   flutter_test:
