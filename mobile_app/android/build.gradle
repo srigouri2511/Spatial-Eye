@@ -27,7 +27,7 @@ subprojects {
                 }
             }
         }
-        project.tasks.withType(JavaCompile).configureEach {
+        project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
             sourceCompatibility = JavaVersion.VERSION_17
             targetCompatibility = JavaVersion.VERSION_17
         }
