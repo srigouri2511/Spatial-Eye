@@ -57,7 +57,7 @@ class IsolateUtils {
         // Send back raw output or processed DetectedObstacles
         isolateData.responsePort.send("SUCCESS");
       } catch (e) {
-        isolateData.responsePort.send("ERROR: \$e");
+        isolateData.responsePort.send("ERROR: $e");
       }
     }
   }
