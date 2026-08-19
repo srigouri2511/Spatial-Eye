@@ -21,7 +21,7 @@ subprojects {
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
             project.android {
-                if (namespace == null) {
+                if (project.android.namespace == null) {
                     namespace project.group
                 }
             }
