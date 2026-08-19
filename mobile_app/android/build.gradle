@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 allprojects {
     repositories {
         google()
@@ -25,19 +27,8 @@ subprojects {
                 targetCompatibility = JavaVersion.VERSION_17
             }
             
-            try {
-                project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                    kotlinOptions.jvmTarget = "17"
-                }
-            } catch (Throwable e) {
-                // If KotlinCompile is not on classpath, fallback
-                project.tasks.configureEach { task ->
-                    if (task.name.toLowerCase().contains("kotlin")) {
-                        try {
-                            task.kotlinOptions.jvmTarget = "17"
-                        } catch (Throwable t) {}
-                    }
-                }
+            project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions.jvmTarget = "17"
             }
         }
     }
