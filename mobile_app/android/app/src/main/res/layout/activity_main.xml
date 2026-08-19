@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- ARCore Camera Surface Preview -->
+    <SurfaceView
+        android:id="@+id/surfaceViewCamera"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="AR Camera Preview Feed" />
+
+    <!-- Overlay Container for High-Contrast Accessible Touch Controls -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/tvCurrentPlace"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Current Place: None Selected"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:padding="8dp"
+            android:contentDescription="Current Place Display" />
+
+        <Button
+            android:id="@+id/btnSelectPlace"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="8dp"
+            android:text="Select Mapped Place"
+            android:textSize="18sp"
+            android:backgroundTint="#1976D2"
+            android:textColor="#FFFFFF"
+            android:contentDescription="Select Mapped Place Button. Double tap to choose a place." />
+
+        <Button
+            android:id="@+id/btnVoiceQuery"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="8dp"
+            android:text="Ask Voice Query"
+            android:textSize="18sp"
+            android:backgroundTint="#388E3C"
+            android:textColor="#FFFFFF"
+            android:contentDescription="Ask Voice Query Button. Double tap to ask what has changed." />
+
+        <Button
+            android:id="@+id/btnScanRoom"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="8dp"
+            android:text="Scan New Room"
+            android:textSize="18sp"
+            android:backgroundTint="#D32F2F"
+            android:textColor="#FFFFFF"
+            android:contentDescription="Scan New Room Button. Double tap to start mapping a new room." />
+
+    </LinearLayout>
+
+</RelativeLayout>
