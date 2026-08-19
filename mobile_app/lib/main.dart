@@ -42,7 +42,7 @@ class _SpatialEyeAppState extends State<SpatialEyeApp> {
         scaffoldBackgroundColor: const Color(0xFFF4F6F9),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
-          foregroundColor: Colors.black80,
+          foregroundColor: Colors.black87,
           elevation: 0,
         ),
         colorScheme: const ColorScheme.light(
