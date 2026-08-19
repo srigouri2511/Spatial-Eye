@@ -20,9 +20,6 @@ tasks.register("clean", Delete) {
 subprojects {
     afterEvaluate { project ->
         if (project.plugins.hasPlugin('com.android.base') || project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library')) {
-            project.android.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
-            project.android.compileOptions.targetCompatibility = JavaVersion.VERSION_17
-            
             project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17
