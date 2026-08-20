@@ -19,7 +19,14 @@ tasks.register("clean", Delete) {
 
 allprojects {
     tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+    tasks.configureEach { task ->
+        if (task.name.toLowerCase().contains("kotlin")) {
+            try {
+                task.kotlinOptions.jvmTarget = "11"
+            } catch (Throwable e) {}
+        }
     }
 }
