@@ -33,3 +33,20 @@ subprojects {
         }
     }
 }
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                if (compileSdkVersion == null || compileSdkVersion.toString().toInteger() < 36) {
+                    compileSdkVersion 36
+                }
+                defaultConfig {
+                    if (minSdkVersion == null || minSdkVersion.apiLevel < 26) {
+                        minSdkVersion 26
+                    }
+                }
+            }
+        }
+    }
+}
