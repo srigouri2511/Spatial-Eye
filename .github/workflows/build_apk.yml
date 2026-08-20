@@ -36,9 +36,17 @@ jobs:
 
       - name: Build Android Release APK
         working-directory: mobile_app
-        run: flutter build apk --release
-        env:
-          GRADLE_OPTS: "-Xmx2048m"
+        shell: bash
+        run: |
+          set +e
+          flutter build apk --release 2>&1 | tee build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "Build failed - full log:"
+            cat build.log
+            exit "$BUILD_EXIT"
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

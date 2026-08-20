@@ -17,16 +17,19 @@ tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
 
-allprojects {
-    tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+subprojects {
+    tasks.withType(JavaCompile).configureEach {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    tasks.configureEach { task ->
-        if (task.name.startsWith("compile") && task.name.endsWith("Kotlin")) {
+
+    tasks.matching { it.name.contains('Kotlin') }.configureEach { t ->
+        if (t.hasProperty('kotlinOptions')) {
             try {
-                task.kotlinOptions.jvmTarget = "17"
-            } catch (Throwable e) {}
+                t.kotlinOptions { jvmTarget = '17' }
+            } catch (Exception e) {
+                logger.warn("Skipped kotlinOptions on ${t.name}: ${e.message}")
+            }
         }
     }
 }
