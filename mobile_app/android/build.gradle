@@ -34,15 +34,4 @@ subprojects {
     }
 }
 
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                compileSdkVersion 36
-                defaultConfig {
-                    minSdkVersion 26
-                }
-            }
-        }
-    }
-}
+
