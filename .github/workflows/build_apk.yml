@@ -48,7 +48,7 @@ jobs:
             git config --global user.name "github-actions"
             git config --global user.email "github-actions@github.com"
             git checkout -b debug-logs-${GITHUB_RUN_ID}
-            git add build.log
+            git add -f build.log
             git commit -m "chore: upload build.log for debugging"
             git push origin debug-logs-${GITHUB_RUN_ID}
             exit "$BUILD_EXIT"
