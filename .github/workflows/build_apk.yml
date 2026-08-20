@@ -45,6 +45,12 @@ jobs:
           if [ "$BUILD_EXIT" -ne 0 ]; then
             echo "Build failed - full log:"
             cat build.log
+            git config --global user.name "github-actions"
+            git config --global user.email "github-actions@github.com"
+            git checkout main
+            git add build.log
+            git commit -m "chore: upload build.log for debugging"
+            git push origin main
             exit "$BUILD_EXIT"
           fi
 
